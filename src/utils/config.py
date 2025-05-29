@@ -9,15 +9,16 @@ class Config:
     if not LLM_PROVIDER:
         raise ValueError("LLM_PROVIDER must be set in the environment variables.")
 
-    OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", None)
+    OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME")
 
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", None)
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     
-    OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", None)
+    OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL")
     if not OLLAMA_EMBEDDING_MODEL:
         raise ValueError("OLLAMA_EMBEDDING_MODEL must be set in the environment variables.")
 
+    VECTOR_STORE_COLLECTION = os.getenv("VECTOR_STORE_COLLECTION")
     DEBUG = os.getenv("DEBUG", False) == True
 
 config = Config()
