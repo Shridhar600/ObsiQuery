@@ -21,5 +21,9 @@ class Config:
     VECTOR_STORE_COLLECTION = os.getenv("VECTOR_STORE_COLLECTION")
     DEBUG = os.getenv("DEBUG", False) == True
 
+    SQLITE_DB_FILE = os.getenv("SQLITE_DB_FILE")
+    if not SQLITE_DB_FILE:
+        raise ValueError("SQLITE_DB_FILE must be set in the environment variables.")
+
 config = Config()
 
