@@ -33,7 +33,7 @@ def process_single_file(file: FileMetadata):
     """
     if not is_valid_metadata(file):
         log.warning(f"Skipping invalid file metadata: {file.file_path}")
-        return Exception("Invalid file metadata, skipping ingestion.")
+        return
     
     log.debug(f"Processing file: {file.file_path}")
 
@@ -47,8 +47,6 @@ def process_single_file(file: FileMetadata):
         log.warning(f"No chunks formed from file: {file.file_path}")
         return
     log.info(f"Formed {len(chunks)} chunks from file: {file.file_path}")
-
-    return
     # for chunk in chunks: 
     #     log.info(f"Chunk content: {chunk.page_content}... with metadata: {chunk.metadata}") 
     # upload_chunks_to_vector_db(chunks, file)
