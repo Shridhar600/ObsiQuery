@@ -1,57 +1,58 @@
-import os
-from pathlib import Path
 from typing import List
-from datetime import datetime
-
-from numpy import long
 from src.utils import setup_logger
-from src.data_ingestion import SQLiteDB
-from src.utils.common_utils import is_valid_metadata
+from src.utils import is_valid_metadata
+from src.models import FileMetadata
+from langchain_core.documents import Document
+from src.models import FileMetadata
+from src.data_ingestion.md_file_processor import load_markdown_file, chunk_documents
 
 log = setup_logger(__name__)
 
-from src.models import FileMetadata
-
-def collect_markdown_metadata(directory: str) -> List[FileMetadata]:
+def ingest_md_files_to_Vector_database(files: List[FileMetadata]):
     """
-    Recursively walks a directory and collects metadata from all Markdown (.md) files.
-
-    Args:
-        directory (str): The root directory to start scanning.
-
-    Returns:
-        List[FileMetadata]: A list of metadata records for each .md file found.
+    Ingests a list of Markdown files from log table by loading, chunking, and uploading them to the vector DB.
+    Skips files with invalid metadata or ingestion issues, but continues processing others.
     """
-    dir_path = Path(directory).resolve()
+    if not files:
+        raise ValueError("No files available for ingestion. Please check logs.")
 
-    if not dir_path.exists() or not dir_path.is_dir():
-        raise ValueError(f"Provided path '{directory}' is not a valid directory.")
+    log.info(f"Starting ingestion of {len(files)} markdown files.")
 
-    markdown_files_metadata: List[FileMetadata] = []
+    for file in files:
+        try:
+            process_single_file(file)
+        except Exception as e:
+            log.error(f"Failed to process file {file.file_path}. Continuing with next. Error: {e}", exc_info=True)
 
-    for root, _, files in os.walk(dir_path): # ROOT = root directory, _ = subdirectories, files = files in the current directory
-        for filename in files:
-            if filename.lower().endswith('.md'):
-                file_path = Path(root) / filename
-                stat = file_path.stat()
-
-                metadata = FileMetadata(
-                    name=file_path.name,
-                    absolute_path=str(file_path.resolve()),
-                    size=stat.st_size,
-                    mtime=stat.st_mtime,  # Last modified time as a Unix timestamp
-                )
-                
-                if not is_valid_metadata(metadata):
-                    log.warning(f"Invalid metadata for file: {file_path}. Skipping.")
-                    continue
-                log.debug(f"Collected metadata for file: {metadata.name}")
-                markdown_files_metadata.append(metadata)
-
-    return markdown_files_metadata
+    log.info("Ingestion pipeline completed.")
 
 
-def log_file_metadata(dir:str) -> None:
+def process_single_file(file: FileMetadata):
+    """
+    Full ingestion pipeline for a single file: validation → load → chunk → vector upload.
+    """
+    if not is_valid_metadata(file):
+        log.warning(f"Skipping invalid file metadata: {file.file_path}")
+        return Exception("Invalid file metadata, skipping ingestion.")
+    
+    log.debug(f"Processing file: {file.file_path}")
 
-    with SQLiteDB() as db:
-        db.upsert_files_metadata(collect_markdown_metadata(dir))
+    documents = load_markdown_file(file)
+    if not documents:
+        log.warning(f"No documents loaded from file: {file.file_path}")
+        return
+    # log.info(f" content = {documents[0].page_content}... with metadata: {documents[0].metadata}")
+    chunks = chunk_documents(documents)
+    if not chunks:
+        log.warning(f"No chunks formed from file: {file.file_path}")
+        return
+    log.info(f"Formed {len(chunks)} chunks from file: {file.file_path}")
+
+    return
+    # for chunk in chunks: 
+    #     log.info(f"Chunk content: {chunk.page_content}... with metadata: {chunk.metadata}") 
+    # upload_chunks_to_vector_db(chunks, file)
+    # log.info(f"Completed ingestion for: {file.file_path}")
+
+def upload_chunks_to_vector_db(chunks: List[Document], file: FileMetadata):
+    pass

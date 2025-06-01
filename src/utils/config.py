@@ -25,5 +25,13 @@ class Config:
     if not SQLITE_DB_FILE:
         raise ValueError("SQLITE_DB_FILE must be set in the environment variables.")
 
+    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1000))
+    if not CHUNK_SIZE or not isinstance(CHUNK_SIZE, int) or CHUNK_SIZE <= 0:
+        raise ValueError("CHUNK_SIZE must be a valid integer.")
+
+    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
+    if not CHUNK_OVERLAP or not isinstance(CHUNK_OVERLAP, int) or CHUNK_OVERLAP < 0:
+        raise ValueError("CHUNK_OVERLAP must be a valid integer.")
+
 config = Config()
 

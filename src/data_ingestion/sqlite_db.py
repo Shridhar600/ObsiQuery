@@ -1,8 +1,11 @@
+import re
 import sqlite3
 import time
 import json
 from typing import Optional, List, Dict, Any
-from src.utils import setup_logger,config
+
+from numpy import insert
+from src.utils import setup_logger,config,Status
 from src.models.file_meta_data import FileMetadata
 
 log = setup_logger(__name__)
@@ -35,12 +38,13 @@ class SQLiteDB:
                 file_hash TEXT,
                 file_size INTEGER,
                 last_modified REAL NOT NULL,        -- OS file last modification timestamp (Unix epoch)
-                last_ingested_timestamp REAL,       -- Timestamp of last successful ingestion (Unix epoch), NULLABLE
+                last_ingested REAL,       -- Timestamp of last successful ingestion (Unix epoch), NULLABLE
                 num_chunks INTEGER,                 -- Number of chunks generated, NULLABLE
                 status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
                 error_message TEXT,                 -- Store error if status is 'failed'
                 metadata_json TEXT,                 -- Store extracted metadata as JSON string, NULLABLE
-                created_at REAL DEFAULT (STRFTIME('%s', 'now')) -- Unix epoch timestamp
+                created_at REAL DEFAULT (STRFTIME('%s', 'now')), -- Unix epoch timestamp
+                is_enabled BOOLEAN DEFAULT 1         -- Indicates if the file metadata is enabled
                 )
             """
         )
@@ -51,17 +55,31 @@ class SQLiteDB:
         Upserts file metadata into the database.
         :param metadata_list: List of FileMetadata objects to upsert.
         """
+        if not metadata_list:
+            log.warning("No metadata to upsert. The list is empty.")
+            return
+
+        log.info(f"{len(metadata_list)} file entries received to be logged into the log table.")
+        inserted_count = 0
+        updated_count = 0
         try:
             with self.connection:
                 for metadata in metadata_list:
-                    existing = self._select_file_by_path(metadata.absolute_path) # check if file_log already exists
+                    existing = self._select_file_by_path(metadata.file_path) # check if file_log already exists
                     if not existing:# File does not exist, insert new entry
-                        self._insert_file_entry(metadata)
+                        is_inserted = self._insert_file_entry(metadata)
+                        if is_inserted:
+                            inserted_count += 1
                     else: # File already exists, update if necessary based on last_modified
                         # log.info(f"File entry exists, checking for updates: {metadata.name} at {metadata.absolute_path}")
-                        self._update_file_if_modified(metadata, existing)
+                        is_updated = self._update_file_if_modified(metadata, existing)
+                        if is_updated:
+                            updated_count += 1
         except Exception as e:
-            log.error(f"Error during upsert: {e}", exc_info=True)
+            log.error(f"Error during upsert in log table: {e}", exc_info=True)
+
+        finally:
+            log.info(f"Upsert completed: {inserted_count} inserted, {updated_count} updated in log table.")
 
     def _select_file_by_path(self, file_path: str) -> Optional[sqlite3.Row]: # private method might change in future if required. 
         try:
@@ -80,48 +98,60 @@ class SQLiteDB:
                 ) VALUES (?, ?, ?, ?, ?)
                 """,
                 (
-                    metadata.name,
-                    metadata.absolute_path,
-                    metadata.size,
-                    metadata.mtime,  # Convert datetime to float (Unix epoch)
-                    "pending",
+                    metadata.file_name,
+                    metadata.file_path,
+                    metadata.file_size,
+                    metadata.last_modified,  # Convert datetime to float (Unix epoch)
+                    Status.PENDING.value,
                 ),
             )
-            log.info(f"Inserted new file record: {metadata.name}")
+            log.debug(f"Inserted new file record: {metadata.file_name}")
+            return True
         except Exception as e:
-            log.error(f"Failed to insert metadata for {metadata.name}: {e}", exc_info=True)
+            log.error(f"Failed to insert metadata for {metadata.file_name}: {e}", exc_info=True)
+            return False
 
     def _update_file_if_modified(self, metadata: FileMetadata, existing: sqlite3.Row):
         try:
             existing_mtime = float(existing["last_modified"])
-            new_mtime = metadata.mtime
+            new_mtime = metadata.last_modified
             # log.info(f"Checking modification for {metadata.name}: existing={existing_mtime}, new={new_mtime}")
             if existing_mtime != new_mtime:
                 self.cursor.execute(
                     """
                     UPDATE obq_log
                     SET file_size = ?, last_modified = ?, status = ?, file_hash = NULL, num_chunks = NULL
-                    WHERE file_path = ?
+                    WHERE file_path = ? and is_enabled = 1
                     """,
                     (
-                        metadata.size,
+                        metadata.file_size,
                         new_mtime,
-                        "pending",
-                        metadata.absolute_path,
+                        Status.PENDING.value,
+                        metadata.file_path,
                     ),
                 )
-                log.info(f"Updated modified file: {metadata.name}")
+                if self.cursor.rowcount == 0:
+                    log.info(f"Log not updated for {metadata.file_name}. It may have been deleted or is invalid.")
+                    return False
+                else:
+                    log.debug(f"Updated modified file: {metadata.file_name}")
+                    return True
             else:
-                log.debug(f"No update needed for: {metadata.name}")
+                log.debug(f"No update needed for: {metadata.file_name}")
+                return False
+        
         except Exception as e:
-            log.error(f"Failed to update metadata for {metadata.name}: {e}", exc_info=True)
+            log.error(f"Failed to update metadata for {metadata.file_name}: {e}", exc_info=True)
+            return False
 
-    def get_files_by_status(self, status: str) -> List[sqlite3.Row]:
+    def get_files_by_status(self, status1: str, status2: str) -> List[sqlite3.Row]:
         """
         Retrieves all file log entries with a specific status.
         """
-        self.cursor.execute("SELECT * FROM obq_log WHERE status = ?", (status,))
-        return self.cursor.fetchall()
+        self.cursor.execute("SELECT * FROM obq_log WHERE status in (?,?) and is_enabled = 1", (status1, status2,))
+        rows = self.cursor.fetchall()
+        # log.info(f"Retrieved {len(rows)} files with status '{status1}' or '{status2}'")
+        return rows
 
     def get_all_tracked_files(self) -> Dict[str, sqlite3.Row]:
         """
@@ -173,4 +203,3 @@ class SQLiteDB:
         Ensures the database connection is closed when exiting the context manager.
         """
         self.close_connection()
-

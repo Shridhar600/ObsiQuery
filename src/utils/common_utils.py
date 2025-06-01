@@ -11,6 +11,6 @@ def is_valid_metadata(metadata: FileMetadata) -> bool:
     Returns:
         bool: True if the metadata is valid, False otherwise.
     """
-    if not metadata.name or not metadata.absolute_path or metadata.size < 0 or metadata.mtime < 0:
+    if not metadata.file_name or not metadata.file_path or metadata.file_size < 0 or metadata.last_modified < 0:
         return False
     return True
