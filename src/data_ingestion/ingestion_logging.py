@@ -12,7 +12,9 @@ def log_file_metadata(dir:str) -> None:
 
     with SQLiteDB() as db:
         try:
-            db.upsert_files_metadata(collect_markdown_metadata(dir))
+            files_metadata = collect_markdown_metadata(dir)
+            log.info(f"Collected {len(files_metadata)} files from {dir}")
+            db.upsert_files_metadata(files_metadata)
         except Exception as e:
             log.error(f"Error logging file metadata: {e}", exc_info=True)
 
