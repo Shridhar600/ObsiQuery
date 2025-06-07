@@ -23,6 +23,7 @@ class FileMetadata:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "FileMetadata":
+        """ row mapper for sqlite3.Row to FileMetadata """
         try:
             metadata = cls(
                 id=row["id"],

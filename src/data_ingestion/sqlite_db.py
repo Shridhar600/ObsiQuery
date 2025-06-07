@@ -1,8 +1,6 @@
-import re
 import sqlite3
 import time
-import json
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 
 from numpy import insert
 from src.utils import setup_logger,config,Status
@@ -21,10 +19,31 @@ class SQLiteDB:
         # Set row_factory to sqlite3.Row to access columns by name
         self.connection.row_factory = sqlite3.Row
         self.cursor = self.connection.cursor()
-        self.create_table_if_not_exists() # this will create the table if it doesn't exist
+        self.create_file_log_table_if_not_exists() # this will create the table if it doesn't exist
+        self.create_chunk_log_table_if_not_exists() # this will create the chunk log table if it doesn't exist
         log.info(f"Connected to SQLite database at {self.db_file}")
 
-    def create_table_if_not_exists(self):
+
+    def create_chunk_log_table_if_not_exists(self):
+        """
+        Creates the 'obq_chunk_log' table if it doesn't already exist.
+        This table is used to log the chunks generated from files.
+        """
+        self.cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS obq_chunk_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER NOT NULL, -- Foreign key to obq_log.id
+                chunk_id TEXT NOT NULL,
+                created_at REAL DEFAULT (STRFTIME('%s', 'now')), -- Unix epoch timestamp
+                FOREIGN KEY (file_id) REFERENCES obq_log(id)
+            )
+            """
+        )
+        self.connection.commit()
+
+# TODO: Might have to make the table name configurable in future if required.
+    def create_file_log_table_if_not_exists(self):
         """
         Creates the 'obq_log' table if it doesn't already exist.
         Uses Unix epoch timestamps for last_modified and last_ingested_timestamp. As it is easy to work with in Python and put in db or for comparison.
@@ -89,7 +108,7 @@ class SQLiteDB:
             log.error(f"Failed to query file path {file_path}: {e}", exc_info=True)
             return None
 
-    def _insert_file_entry(self, metadata: FileMetadata): # as of now, this is a single file insert, but can be extended to batch inserts if needed.
+    def _insert_file_entry(self, metadata: FileMetadata): # as of now, this is a single file insert, but can be extended to batch inserts if needed.dekhte hain 
         try:
             self.cursor.execute(
                 """
@@ -121,7 +140,7 @@ class SQLiteDB:
                     """
                     UPDATE obq_log
                     SET file_size = ?, last_modified = ?, status = ?, file_hash = NULL, num_chunks = NULL
-                    WHERE file_path = ? and is_enabled = 1
+                    WHERE file_path = ?
                     """,
                     (
                         metadata.file_size,
@@ -143,6 +162,107 @@ class SQLiteDB:
         except Exception as e:
             log.error(f"Failed to update metadata for {metadata.file_name}: {e}", exc_info=True)
             return False
+        
+    def update_file_status(self, id: int, status: str, error_message: Optional[str] = None):
+        """
+        Updates the status of a file log entry by its ID.
+        :param id: The ID of the file log entry to update.
+        :param status: The new status to set (e.g., 'pending', 'processing', 'completed', 'failed').
+        :param error_message: Optional error message if the status is 'failed'.
+        """
+        try:
+            last_ingested = time.time()  # Current time as Unix epoch timestamp
+            self.cursor.execute(
+                """
+                UPDATE obq_log
+                SET status = ?, error_message = ?, last_ingested = ?
+                WHERE id = ?
+                """,
+                (status, error_message, last_ingested, id)
+            )
+            self.connection.commit()
+            # log.info(f"Updated file log entry {id} to status '{status}'")
+        except Exception as e:
+            log.error(f"Failed to update file log entry {id}: {e}", exc_info=True)
+            self.connection.rollback()
+
+    # i know dono same hai but last_ingestion update ni krna mereko baar baar.
+    def update_final_ingestion_status(self, id: int, num_chunks: int, status: str, error_message: Optional[str] = None):
+        """
+        Updates the final ingestion status of a file log entry by its ID.
+        :param id: The ID of the file log entry to update.
+        :param num_chunks: The number of chunks generated during ingestion.
+        :param last_ingested: The timestamp of the last successful ingestion (Unix epoch).
+        """
+        try:
+        
+            self.cursor.execute(
+                """
+                UPDATE obq_log
+                SET status = ?, num_chunks = ?, error_message = ?
+                WHERE id = ?
+                """,
+                (status, num_chunks, error_message, id)
+            )
+            self.connection.commit()
+            # log.info(f"Updated file log entry {id} to completed with {num_chunks} chunks")
+        except Exception as e:
+            log.error(f"Failed to update final ingestion status for file log entry {id}: {e}", exc_info=True)
+            self.connection.rollback()
+
+    def update_chunk_log(self, file_id: int, chunk_id: list[str]):
+        """
+        Inserts or updates chunk log entries for a file.
+        :param file_id: List of file IDs to associate with the chunks.
+        :param chunk_id: List of chunk IDs to log.
+        """
+        try:
+            with self.connection:
+                for cid in chunk_id:
+                    self.cursor.execute(
+                        """
+                        INSERT INTO obq_chunk_log (file_id, chunk_id)
+                        VALUES (?, ?)
+                        """,
+                        (file_id, cid)
+                    )
+            log.info(f"Inserted {len(chunk_id)} chunk log entries for file ID(s): {file_id}")
+        except Exception as e:
+            log.error(f"Failed to insert chunk log entries: {e}", exc_info=True)
+
+    def is_file_id_already_chunked(self, file_id: int) -> bool:
+        """
+        Checks if a file ID has already been chunked by querying the obq_chunk_log table.
+        :param file_id: The ID of the file to check.
+        :return: True if the file ID exists in the chunk log, False otherwise.
+        """
+        try:
+            self.cursor.execute("SELECT 1 FROM obq_chunk_log WHERE file_id = ?", (file_id,))
+            return self.cursor.fetchone() is not None
+        except Exception as e:
+            log.error(f"Failed to check if file ID {file_id} is already chunked: {e}", exc_info=True)
+            return False
+        
+
+    def fetch_and_delete_chunk_logs(self, file_id: int) -> List[str]:
+        """
+        Fetches and deletes chunk log entries for a specific file ID.
+        :param file_id: The ID of the file to fetch and delete chunk logs for.
+        :return: A list of chunk IDs that were deleted.
+        """
+        chunk_ids = []
+        try:
+            self.cursor.execute("SELECT chunk_id FROM obq_chunk_log WHERE file_id = ?", (file_id,))
+            chunk_ids = [row[0] for row in self.cursor.fetchall()]
+            if chunk_ids:
+                self.cursor.execute("DELETE FROM obq_chunk_log WHERE file_id = ?", (file_id,))
+            self.connection.commit()
+            log.info(f"Deleted chunk logs for file_id {file_id}: {chunk_ids}")
+        except Exception as e:
+            log.error(f"Failed to fetch and delete chunk logs for file_id {file_id}: {e}", exc_info=True)
+            self.connection.rollback()
+            raise e
+        return chunk_ids
 
     def get_files_by_status(self, status1: str, status2: str) -> List[sqlite3.Row]:
         """

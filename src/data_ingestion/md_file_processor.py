@@ -1,11 +1,15 @@
-from typing import List, Optional
+from typing import Any, Dict, List
 from src.utils import setup_logger,config
 from src.models import FileMetadata
-from langchain_community.document_loaders import UnstructuredMarkdownLoader
+from langchain_community.document_loaders import TextLoader
 from langchain_core.documents import Document
 from src.models import FileMetadata
+from markdown_it import MarkdownIt
+
 
 log = setup_logger(__name__)
+
+SemanticBlock = Dict[str, Any]  
 
 def load_markdown_file(file: FileMetadata) -> List[Document]:
     """
@@ -14,15 +18,14 @@ def load_markdown_file(file: FileMetadata) -> List[Document]:
     """
     metadata = {"source": file.file_path, "log_id": file.id}
     documents: List[Document] = []
-
     try:
-        loaded = UnstructuredMarkdownLoader(file.file_path).load()
+        # loaded = UnstructuredMarkdownLoader(file.file_path).load()
+        loaded = TextLoader(file.file_path,encoding='utf-8').load()  # Using TextLoader to preserve headers
         for doc in loaded:
             documents.append(Document(page_content=doc.page_content, metadata=metadata))
-        log.info(f"Loaded {len(documents)} documents from file: {file.file_path}")
+        # log.info(f"Loaded {len(documents)} documents from file: {file.file_path}")
         if not documents:
             log.warning(f"Empty document list after loading: {file.file_path}")
-
     except FileNotFoundError:
         log.error(f"File not found during load: {file.file_path}", exc_info=True)
     except Exception as e:
@@ -30,172 +33,288 @@ def load_markdown_file(file: FileMetadata) -> List[Document]:
 
     return documents
 
-
-def chunk_documents(documents: List[Document]) -> List[Document]:
+def chunk_documents(documents: List[Document], file_metadata: FileMetadata ) -> List[Document]:
     """
-    Chunk documents intelligently with section-awareness and overlap.
+    Orchestrates the markdown chunking process:
+    1. Consume raw text from the TextLoader Document.
+    2. Get semantic blocks using markdown-it-py.
+    3. Assemble blocks into LangChain Document chunks with overlap and metadata.
+    Assumes input 'documents' is a list containing a single Document from TextLoader. idk why but langchain load method emits a list of Document containing a single Document.
+    Returns a list of Document chunks.
     """
-    chunked_docs = []
-    for doc in documents:
-        try:
-            blocks = split_into_markdown_blocks(doc.page_content)
-            if not blocks:
-                log.warning(f"No valid blocks found in document: {doc.metadata.get('source')}")
-                continue
-            chunks = assemble_chunks_from_blocks(
-                blocks, 
-                chunk_size=config.CHUNK_SIZE,
-                overlap=config.CHUNK_OVERLAP,
-                base_metadata=doc.metadata
-            )
-            chunked_docs.extend(chunks)
-        except Exception as e:
-            log.error(f"Error chunking document {doc.metadata.get('source')}: {e}", exc_info=True)
+    if not documents or not documents[0].page_content:
+         log.warning(f"No content found for chunking in {file_metadata.file_path}") 
+         return []
 
-    return chunked_docs
+    raw_text = documents[0].page_content # Get raw text from TextLoader Document
 
+    semantic_blocks = get_semantic_blocks(raw_text)
+    log.info(f"Extracted {len(semantic_blocks)} semantic blocks from {file_metadata.file_path}")
 
-def split_into_markdown_blocks(content: str) -> List[str]:
-    """
-    Split markdown content into logical blocks.
-    Preserves entire code blocks enclosed by triple backticks.
-    Other content is split using empty lines as separators.
-    """
-    blocks = []
-    buffer = []
-    in_code_block = False
-    code_fence = None  # Track ``` or ~~~ for code blocks
-    code_block_counter = 0
-
-    try:
-        lines = content.splitlines()
-
-        for line in lines:
-            stripped = line.strip()
-
-            # Detect code block start/end
-            if stripped.startswith("```") or stripped.startswith("~~~"):## here we can also make it like if there's a code block then block should have the previous line as well so that we can preserve the code block title as well.
-                if in_code_block:
-                    # Closing a code block
-                    buffer.append(line)
-                    block = "\n".join(buffer).strip()
-                    blocks.append(block)
-                    buffer = []
-                    in_code_block = False
-                    code_fence = None
-                    code_block_counter += 1
-                else:
-                    # Starting a new code block
-                    if buffer:
-                        block = "\n".join(buffer).strip()
-                        blocks.append(block)
-                        buffer = []
-                    buffer.append(line)
-                    in_code_block = True
-                    code_fence = stripped[:3]  # Store ``` or ~~~
-            elif in_code_block:
-                buffer.append(line)
-            elif stripped == "":
-                # Paragraph break
-                if buffer:
-                    block = "\n".join(buffer).strip()
-                    blocks.append(block)
-                    buffer = []
-            else:
-                buffer.append(line)
-
-        # Handle leftover buffer
-        if buffer:
-            block = "\n".join(buffer).strip()
-            blocks.append(block)
-
-        # Check for unclosed code block
-        if in_code_block:
-            log.warning("Unclosed code block detected. Flushing anyway.")
-        
-        final_blocks = [block for block in blocks if block]
-
-        # #just for debugging
-        # for blocksd in final_blocks:
-        #     log.info(f"block produced = {blocksd}")
-
-        log.info(f"Total code blocks detected: {code_block_counter}")
-        log.info(f"Total blocks produced: {len(final_blocks)}")
-        return final_blocks
-
-    except Exception as e:
-        log.exception("Error while splitting markdown blocks.")
+    if not semantic_blocks:
+        log.warning(f"No semantic blocks extracted from {file_metadata.file_path}") 
         return []
 
-def assemble_chunks_from_blocks(
-    blocks: List[str],
+    # Step 2: Assemble chunks from blocks
+    final_chunks = assemble_chunks_from_semantic_blocks(
+        semantic_blocks,
+        config.CHUNK_SIZE, # type: ignore
+        config.CHUNK_OVERLAP, # type: ignore
+        file_metadata.file_path, # Pass source
+        file_metadata.id,    # Pass log_id
+        file_metadata.file_name
+    )
+    # for chunk in final_chunks:
+    #     log.info(f'Final Chunk:{chunk}')
+    #     log.info('_______________________________________---------------------________________________________________')
+
+    return final_chunks
+
+def assemble_chunks_from_semantic_blocks(
+    semantic_blocks: List[SemanticBlock],
     chunk_size: int,
     overlap: int,
-    base_metadata: Optional[dict] = None
+    source: str,
+    log_id: int,
+    file_name: str
 ) -> List[Document]:
     """
-    Create overlapping chunks from markdown blocks, preserving section titles in metadata.
+    Assembles a list of semantic blocks (including headings) into LangChain Document chunks
+    respecting chunk_size, overlap, and metadata.
     """
-    chunks = []
-    current_chunk = []
-    current_length = 0
-    current_section_title = "Unknown"
+    final_chunks: List[Document] = []
+    current_chunk_strings: List[str] = [] # Stores raw content strings for the current chunk
+    current_chunk_blocks: List[SemanticBlock] = [] # Stores block objects for metadata lookup (first block's header)
 
-    # First, tag each block with the current section heading
-    block_section_pairs = []
-    for block in blocks:
-        # header_match = re.match(r"^\s*(#{1,6})\s+(.*)", block) # this is not working because of UnstructuredMarkdownLoader stripping the headers, might need to use a simple text loader to preserve headers
-        # if header_match:
-        #     current_section_title = header_match.group(2).strip()
-        block_section_pairs.append((block, current_section_title))
+    # Store blocks from the *previous* finalized chunk to generate overlap for the *next* chunk.
+    # store the actual blocks because we need their content and header 
+    previous_chunk_blocks: List[SemanticBlock] = []
 
-    i = 0
-    while i < len(block_section_pairs):
-        block, section = block_section_pairs[i]
-        block_length = len(block)
-        # here we check if the current block can fit into the current chunk if yes, then we add it to the current chunk
-        if current_length + block_length <= chunk_size: # Check if adding this block exceeds the chunk size.
-            current_chunk.append((block, section)) # Add block and section to current chunk
-            current_length += block_length # Update current length
-            i += 1
-        else:
-            # finalize the current chunk
-            chunk_text = "\n\n".join([b for b, _ in current_chunk])
-            metadata = dict(base_metadata or {})
-            # metadata["section_title"] = most_common_section_title(current_chunk)
-            metadata["section_title"] = "Unknown"
-            chunks.append(Document(page_content=chunk_text, metadata=metadata))
+    # Helper to calculate current buffer length including separators
+    def get_current_buffer_len(parts: List[str]) -> int:
+        """Calculates length of joined string with '\n\n' separators."""
+        return len("\n\n".join(parts)) if parts else 0
 
-            # Overlap window
-            overlap_chunk = []
-            overlap_len = 0
-            for b, s in reversed(current_chunk):
-                if overlap_len + len(b) <= overlap:
-                    overlap_chunk.insert(0, (b, s)) # Add to the front block of the overlap chunk
-                    overlap_len += len(b)
-                else:
-                    break
+    # Helper to create a chunk Document
+    def create_chunk_document(content_parts: List[str], blocks_in_chunk: List[SemanticBlock]):
+         """Creates a LangChain Document from content parts and block metadata."""
+         page_content = "\n\n".join(content_parts).strip() # Strip final chunk content
 
-            current_chunk = overlap_chunk
-            current_length = sum(len(b) for b, _ in current_chunk)
+         section_title = blocks_in_chunk[0]['header'] if blocks_in_chunk else ""
 
-    # Final chunk
-    if current_chunk:
-        chunk_text = "\n\n".join([b for b, _ in current_chunk])
-        metadata = dict(base_metadata or {})
-        # metadata["section_title"] = most_common_section_title(current_chunk)
-        metadata["section_title"] = "Unknown"
-        chunks.append(Document(page_content=chunk_text, metadata=metadata))
+         return Document(
+             page_content=page_content,
+             metadata={'source': source, 'file_name': file_name, 'log_id': log_id, 'section_title': section_title}
+         )
 
-    return chunks
+    for i, block in enumerate(semantic_blocks):
+        block_text = block['content']
+        block_type = block['type']
+        block_header = block['header'] # Header associated with this specific block
+
+        # Assumes a "\n\n" separator if the buffer is not empty
+        potential_buffer_strings = current_chunk_strings + [block_text]
+        potential_len = get_current_buffer_len(potential_buffer_strings)
+
+        # Case 1: Current block is individually larger than chunk_size.
+        # Process as a standalone chunk if it's the first block we consider for a chunk.
+        is_oversized_block = not current_chunk_strings and len(block_text) > chunk_size
+
+        if is_oversized_block:
+             log.debug(f"Creating oversized chunk for block type: {block_type}")
+             # Create a chunk just for this block. Its header is its own associated header.
+             final_chunks.append(
+                 Document(
+                     page_content=block_text.strip(), # Strip content of the single block chunk
+                     metadata={'source': source, 'file_name': file_name, 'log_id': log_id, 'section_title': block_header}
+                 )
+             )
+             # previous_chunk_blocks remains unchanged from before this oversized block.
+             continue # Move to the next block
 
 
-# def most_common_section_title(chunks: List[tuple]) -> str: #doesn't work right now.
-#     """
-#     Get the most common section title in the chunk. Fallback to last if uncertain.
-#     """
-#     from collections import Counter
-#     section_counts = Counter(section for _, section in chunks if section)
-#     if section_counts:
-#         return section_counts.most_common(1)[0][0]
-#     return "Unknown"
+        # Case 2: Adding current block makes the current chunk buffer exceed chunk_size
+        elif potential_len > chunk_size:
+            log.debug(f"Chunk size exceeded ({potential_len} > {chunk_size}) by block type: {block_type}. Finalizing current chunk.")
+            # Finalize the current chunk (excluding the block that would exceed)
+            final_chunks.append(create_chunk_document(current_chunk_strings, current_chunk_blocks))
+
+            # Save blocks from this just-finalized chunk for potential overlap in the *next* chunk
+            previous_chunk_blocks = current_chunk_blocks[:] # Shallow copy
+
+            current_chunk_strings = []
+            current_chunk_blocks = []
+
+            overlap_parts: List[str] = [] # Stores the string content parts for the overlap
+
+            header_to_add = block_header.strip() # Use the header associated with the CURRENT block
+            if header_to_add:
+
+                 temp_overlap_blocks: List[SemanticBlock] = []
+                 temp_overlap_len = 0
+                 overlap_separator_len = len("\n\n") # Assume separators between overlap parts
+                 for j in range(len(previous_chunk_blocks) - 1, -1, -1):
+                      prev_b = previous_chunk_blocks[j]
+                      prev_block_text = prev_b['content']
+
+                      # Calculate potential length if we add this block's content + separator if not the first overlap part
+                      len_to_add = len(prev_block_text) + (overlap_separator_len if temp_overlap_len > 0 else 0)
+
+                      if temp_overlap_len + len_to_add <= overlap:
+                          temp_overlap_blocks.insert(0, prev_b) # Insert at the start to maintain order (oldest first)
+                          temp_overlap_len += len_to_add
+                      else:
+                           break # Adding this block would exceed total overlap limit, stop.
+
+                 # The content for the overlap part is the joined content of temp_overlap_blocks
+                 # These are already in correct order 
+                 overlap_parts = [b['content'] for b in temp_overlap_blocks]
+
+                 # If overlap was generated add it to the new chunk buffer
+                 if overlap_parts:
+                      current_chunk_strings.extend(overlap_parts)
+                      # current_chunk_blocks DON'T include overlap blocks for the purpose of section_title 
+
+            current_chunk_strings.append(block_text)
+            current_chunk_blocks.append(block) 
+
+        else: # current_chunk_strings is empty aur adding fits
+            current_chunk_strings.append(block_text)
+            current_chunk_blocks.append(block)
+
+    if current_chunk_strings:
+        log.debug(f"Finalizing last chunk with {len(current_chunk_strings)} parts.")
+        final_chunks.append(create_chunk_document(current_chunk_strings, current_chunk_blocks))
+
+    # log.info(f"Assembled {len(final_chunks)} chunks.")
+    return final_chunks
+
+
+def get_semantic_blocks(raw_markdown_text: str) -> List[SemanticBlock]:
+    """
+    Parses markdown text using markdown-it-py and extracts semantic blocks
+    (headings, paragraphs, code, lists, etc.) with associated headers.
+    Uses token.map for precise text extraction from original lines.
+    Headers are included as distinct 'heading' blocks.
+    """
+    md = MarkdownIt()
+    tokens = md.parse(raw_markdown_text)
+    lines = raw_markdown_text.split('\n')
+
+    semantic_blocks: List[SemanticBlock] = []
+    current_header_text: str = ""
+    i = 0 # Token index
+
+    while i < len(tokens):
+        token = tokens[i]
+        token_type = token.type
+
+
+        if token_type == 'heading_open':
+            # The text of the heading is in the next token, which is inline
+            # Get stripped header text first to set current_header_text immediately
+            header_text_stripped = ""
+            next_token = tokens[i + 1]
+            if next_token.type == 'inline' and next_token.content:
+                 header_text_stripped = next_token.content.strip()
+            current_header_text = header_text_stripped # Update tracker
+
+            # Now extract the raw markdown header line(s) using token.map
+            header_content = ""
+            if token.map: # Ensure map exists for this token
+                start_line, end_line_exclusive = token.map
+                header_lines = lines[start_line : end_line_exclusive]
+                header_content = "\n".join(header_lines)
+
+            # Add the heading as a semantic block itself
+            if header_content.strip(): # Add block only if it has content 
+                 semantic_blocks.append({
+                     'type': 'heading', # Explicitly label this block as a heading
+                     'content': header_content, # Raw markdown header text 
+                     'header': header_text_stripped # Store stripped text as well
+                 })
+
+            i += 3
+            continue 
+
+        # Identify block-level tokens that we want to treat as semantic units
+        is_semantic_block_start = token_type in [
+            'paragraph_open',      # Standard paragraph
+            'fence',               # Fenced code block (```)
+            'code_block',          # Indented code block
+            'blockquote_open',     # Blockquote (> ...)
+            'bullet_list_open',
+            'ordered_list_open',
+            'list_item_open',      # Individual list item
+            'html_block',          # Raw HTML block
+            'hr',                  # Horizontal rule (---)
+        ]
+
+        if is_semantic_block_start and token.map:
+             # token.map is usually [start_line_0_indexed, end_line_0_indexed + 1]
+             start_line, end_line_exclusive = token.map
+
+             # Slice the original lines to get the block's text
+             block_content_lines = lines[start_line : end_line_exclusive]
+             block_content = "\n".join(block_content_lines)
+
+
+             block_type = token_type.replace('_open', '')
+             if token_type in ['fence', 'code_block']: block_type = 'code_block'
+             if token_type in ['bullet_list_open', 'ordered_list_open']: block_type = 'list' 
+             if token_type == 'list_item_open': block_type = 'list_item' # Keep list item specific
+
+             if block_content.strip():
+                  semantic_blocks.append({
+                     'type': block_type,
+                     'content': block_content,
+                     'header': current_header_text 
+                  })
+
+             if token_type in ['fence', 'code_block', 'hr', 'html_block']:
+                  i += 1
+                  continue
+
+             if token_type in ['paragraph_open', 'blockquote_open', 'list_item_open']:
+                  close_tag_type = token_type.replace('_open', '_close')
+                  k = i + 1
+                  nesting_level = 1 
+                  while k < len(tokens):
+                       if tokens[k].type == token_type: 
+                            nesting_level += 1
+                       elif tokens[k].type == close_tag_type:
+                            nesting_level -= 1
+                            if nesting_level == 0:
+                                 i = k + 1 
+                                 break 
+                       k += 1
+
+                  if k == len(tokens):
+                       i += 1 
+                  continue 
+
+             if token_type in ['bullet_list_open', 'ordered_list_open']:
+                 close_tag_type = token_type.replace('_open', '_close')
+                 k = i + 1
+                 nesting_level = 1
+                 while k < len(tokens):
+                     if tokens[k].type == token_type:
+                         nesting_level += 1
+                     elif tokens[k].type == close_tag_type:
+                         nesting_level -= 1
+                         if nesting_level == 0:
+                              i = k + 1
+                              break
+                     k += 1
+                 if k == len(tokens): i += 1
+                 continue
+
+             log.warning(f"Unhandled semantic block type for index advancement: {token_type} at token index {i}")
+             i += 1 # Fallback advancement
+             continue
+
+        i += 1
+
+    log.debug(f"Extracted {len(semantic_blocks)} semantic blocks.")
+
+    return semantic_blocks

@@ -1,10 +1,9 @@
 from typing import List
-from src.utils import setup_logger
-from src.utils import is_valid_metadata
-from src.models import FileMetadata
-from langchain_core.documents import Document
+from src.utils import setup_logger,is_valid_metadata,Status
 from src.models import FileMetadata
 from src.data_ingestion.md_file_processor import load_markdown_file, chunk_documents
+from src.vector_store import upload_documents_to_vector_store
+from src.data_ingestion import SQLiteDB
 
 log = setup_logger(__name__)
 
@@ -14,14 +13,22 @@ def ingest_md_files_to_Vector_database(files: List[FileMetadata]):
     Skips files with invalid metadata or ingestion issues, but continues processing others.
     """
     if not files:
-        raise ValueError("No files available for ingestion. Please check logs.")
+        log.warning("No files available for ingestion. Please check logs.")
+        return 
 
-    log.info(f"Starting ingestion of {len(files)} markdown files.")
+    log.info(f" -----  Starting ingestion of {len(files)} markdown files. ----- ")
+    # need to think about implementing batch processing.
 
     for file in files:
+        log.info(f"Processing file: {file.file_path}")
+        # sqlite db to be update with status started.
         try:
+            with SQLiteDB() as db:
+                db.update_file_status(file.id, Status.PROCESSING.value)
             process_single_file(file)
         except Exception as e:
+            with SQLiteDB() as db:
+                db.update_file_status(file.id, Status.FAILED.value, error_message=str(e))
             log.error(f"Failed to process file {file.file_path}. Continuing with next. Error: {e}", exc_info=True)
 
     log.info("Ingestion pipeline completed.")
@@ -37,20 +44,28 @@ def process_single_file(file: FileMetadata):
     
     log.debug(f"Processing file: {file.file_path}")
 
-    documents = load_markdown_file(file)
-    if not documents:
-        log.warning(f"No documents loaded from file: {file.file_path}")
-        return
-    # log.info(f" content = {documents[0].page_content}... with metadata: {documents[0].metadata}")
-    chunks = chunk_documents(documents)
-    if not chunks:
-        log.warning(f"No chunks formed from file: {file.file_path}")
-        return
-    log.info(f"Formed {len(chunks)} chunks from file: {file.file_path}")
-    # for chunk in chunks: 
-    #     log.info(f"Chunk content: {chunk.page_content}... with metadata: {chunk.metadata}") 
-    # upload_chunks_to_vector_db(chunks, file)
-    # log.info(f"Completed ingestion for: {file.file_path}")
+    try: 
+        documents = load_markdown_file(file)    
+        if not documents:
+            log.warning(f"No documents loaded from file: {file.file_path}")
+            return
+        # log.info(f"Loaded {len(documents)} documents from file: {file.file_path}")
+        
+        chunks = chunk_documents(documents, file)
+        if not chunks:
+            log.warning(f"No chunks formed from file: {file.file_path}")
+            return
+        log.info(f"Formed {len(chunks)} chunks from file: {file.file_path}")
 
-def upload_chunks_to_vector_db(chunks: List[Document], file: FileMetadata):
-    pass
+        upload_documents_to_vector_store(chunks,file.id)
+
+        with SQLiteDB() as db:
+            db.update_final_ingestion_status(file.id, len(chunks), Status.COMPLETED.value)
+        log.info(f"Successfully processed and uploaded chunks for file: {file.file_path}")
+
+    except Exception as e:
+        log.error(f"Error processing file {file.file_path}: {e}", exc_info=True)
+        with SQLiteDB() as db:
+            db.update_final_ingestion_status(file.id, 0, Status.FAILED.value, error_message=str(e))
+        raise 
+

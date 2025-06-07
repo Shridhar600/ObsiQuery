@@ -19,6 +19,7 @@ class Config:
         raise ValueError("OLLAMA_EMBEDDING_MODEL must be set in the environment variables.")
 
     VECTOR_STORE_COLLECTION = os.getenv("VECTOR_STORE_COLLECTION")
+    
     DEBUG = os.getenv("DEBUG", False) == True
 
     SQLITE_DB_FILE = os.getenv("SQLITE_DB_FILE")

@@ -1,7 +1,8 @@
 from src.utils import config, setup_logger
 from langchain_chroma import Chroma
 from src.embedding import embedding_model_instance
-
+from src.data_ingestion import SQLiteDB
+from langchain_core.documents import Document
 
 log = setup_logger(__name__)
 
@@ -33,6 +34,63 @@ class VectorStorage:
 vector_store_instance = VectorStorage(embedding_model_instance=embedding_model_instance).get_vector_store()
 
 
+def upload_documents_to_vector_store(documents: list[Document], file_id: int):
+    """
+    Uploads documents to the vector store.
+    """
+    if not documents:
+        raise ValueError("No documents provided for upload.")
+    try:
+        check_if_chunks_already_uploaded(file_id)
+    except Exception as e:
+        log.error(f"Skipping upload due to issue in clearing out previous chunks: {str(e)}")
+        raise
+    try:
+        import uuid
+        ids = [str(uuid.uuid4()) for _ in range(len(documents))] 
+        # log.info(f"Uploading {len(documents)} chunks to vector store.")
+        vector_store_instance.add_documents(documents=documents, ids=ids)
+        with SQLiteDB() as db:
+            db.update_chunk_log(
+                file_id=file_id,
+                chunk_id=ids,
+            )
+        log.info("Documents uploaded to vector store successfully.")
+    except Exception as e:
+        log.error(f"Failed to upload documents: {str(e)}")
+        raise e
+
+
+def check_if_chunks_already_uploaded(file_id: int):
+    """
+    Checks if chunks for the given file_id have already been uploaded to the vector store.
+    Raises an exception if they have.
+    """
+    try:
+        with SQLiteDB() as db:
+            existing_chunks = db.is_file_id_already_chunked(file_id)
+            if existing_chunks:
+                log.info(f"Chunks for file_id {file_id} already exist in the vector store.")
+                delete_existing_chunks(file_id)
+    except Exception as e:
+        log.error(f"Failed to check existing chunks: {str(e)}")
+        raise e
+
+def delete_existing_chunks(file_id: int):
+    """
+    Deletes existing chunks for the given file_id from the vector store and also from the SQLite database.
+    """
+    try:
+        with SQLiteDB() as db:
+            chunk_ids = db.fetch_and_delete_chunk_logs(file_id)
+        vector_store_instance.delete(ids=chunk_ids)
+        log.info(f"Deleted {len(chunk_ids)} chunks for file_id {file_id} from vector store.")
+    except Exception as e:
+        log.error(f"Failed to delete existing chunks: {str(e)}")
+        raise e
+
+
+#test Run the test function to verify the vector store
 def test_vector_store(vector_store_instance):
     """
     Test function to verify the vector store.
