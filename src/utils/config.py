@@ -33,6 +33,10 @@ class Config:
     CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
     if not CHUNK_OVERLAP or not isinstance(CHUNK_OVERLAP, int) or CHUNK_OVERLAP < 0:
         raise ValueError("CHUNK_OVERLAP must be a valid integer.")
+    
+    OBSIDIAN_VAULT_PATH = os.getenv("OBSIDIAN_VAULT_PATH")
+    if not OBSIDIAN_VAULT_PATH:
+        raise ValueError("OBSIDIAN_VAULT_PATH must be set in the environment variables.")
 
 config = Config()
 
