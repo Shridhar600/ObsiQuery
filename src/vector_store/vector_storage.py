@@ -3,6 +3,7 @@ from langchain_chroma import Chroma
 from src.embedding import embedding_model_instance
 from src.data_ingestion import SQLiteDB
 from langchain_core.documents import Document
+from src.models import VectorSearchOutputSchema
 
 log = setup_logger(__name__)
 
@@ -88,6 +89,25 @@ def delete_existing_chunks(file_id: int):
     except Exception as e:
         log.error(f"Failed to delete existing chunks: {str(e)}")
         raise e
+    
+
+def similarity_search( query_filter: VectorSearchOutputSchema) -> list[Document]:
+    if not query_filter:
+        raise ValueError("No Query filter received for similarity Search")
+    
+    filenames_to_filter = query_filter.filter_by_filenames
+
+    filter = {}
+    if filenames_to_filter:
+        filter["file_name"] = {"$in": filenames_to_filter}
+
+    try: 
+        response =  vector_store_instance.similarity_search(query=query_filter.refined_query_for_vector_search,k = 3, filter=filter)
+        log.info(response)
+        return response
+    except Exception as e:
+        log.error(f"Error during similarity search: {str(e)}")
+        return []
 
 
 #test Run the test function to verify the vector store

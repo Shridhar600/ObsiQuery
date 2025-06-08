@@ -1,1 +1,1 @@
-from .vector_storage import vector_store_instance ,upload_documents_to_vector_store
+from .vector_storage import vector_store_instance ,upload_documents_to_vector_store,similarity_search
