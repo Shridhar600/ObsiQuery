@@ -9,6 +9,7 @@ import logging
 from src.core.data_pipeline import run_ingestion_test
 from src.nodes.react_agent_node import react_agent_node
 from src.nodes.rag_agent_tool_node import get_vector_search_filters_from_llm, retrieve_notes_tool
+from src.core.chatbot_core import test_run
 
 # =============================
 # Setup: Debugging Hooks
@@ -55,7 +56,9 @@ if __name__ == "__main__":
    #      ]
    #  })
 
-   retrieve_notes_tool("file name is obsiquery and vector search could be done using obsiquery prd.")
+   # retrieve_notes_tool("file name is obsiquery and vector search could be done using obsiquery prd.")
+
+   test_run()
     
    #  logging.debug("🛑 Ingestion test finished")
 
