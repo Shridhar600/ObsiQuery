@@ -15,7 +15,7 @@ class VectorSearchOutputSchema(BaseModel):
         )
     )
     
-    filter_by_filenames: Optional[List[str]] = Field(
+    filenames_filter: Optional[List[str]] = Field(
         default=None,
         description=(
             "An optional list of one or more filenames to filter the vector search. "
@@ -25,13 +25,4 @@ class VectorSearchOutputSchema(BaseModel):
             "If no specific files can be confidently identified as exclusively relevant, leave this field null or an empty list."
         )
     )
-
-        # filter_by_filenames: Optional[Union[str, List[str]]] = Field(
-    #     default=None,
-    #     description=(
-    #         "An optional filename or list of filenames to filter the vector search. "
-    #         "If a single string, filter by that one file. If a list, filter by any of the files in the list (OR condition). "
-    #         "If no specific files can be confidently identified, leave this null."
-    #     )
-    # )
     

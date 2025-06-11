@@ -95,7 +95,7 @@ def similarity_search( query_filter: VectorSearchOutputSchema) -> list[Document]
     if not query_filter:
         raise ValueError("No Query filter received for similarity Search")
     
-    filenames_to_filter = query_filter.filter_by_filenames
+    filenames_to_filter = query_filter.filenames_filter
 
     filter = {}
     if filenames_to_filter:
@@ -103,7 +103,7 @@ def similarity_search( query_filter: VectorSearchOutputSchema) -> list[Document]
 
     try: 
         response =  vector_store_instance.similarity_search(query=query_filter.refined_query_for_vector_search,k = 3, filter=filter)
-        log.info(response)
+        log.info(f" -- Retrieved {len(response)} documents from User's Notes.")
         return response
     except Exception as e:
         log.error(f"Error during similarity search: {str(e)}")

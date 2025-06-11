@@ -1,5 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from .system_prompts import RAG_AGENT_SYSTEM_PROMPT,REACT_AGENT_SYSTEM_PROMPT
+from .system_prompts import VECTOR_SEARCH_FILTER_AGENT_PROMPT,REACT_AGENT_SYSTEM_PROMPT,SYNTHESIS_AGENT_SYSTEM_PROMPT
 
 
 def get_react_agent_prompt_template() -> ChatPromptTemplate:
@@ -17,10 +17,19 @@ def get_react_agent_prompt_template() -> ChatPromptTemplate:
 
 def get_rag_agent_prompt_template() -> ChatPromptTemplate:
 
-    system_prompt = RAG_AGENT_SYSTEM_PROMPT
+    system_prompt = VECTOR_SEARCH_FILTER_AGENT_PROMPT
     return ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt), # this has files, conversation history for context.
             ("human", "ReAct_agent Query: {input_query_from_react_agent}") 
+        ]
+    )
+
+
+def get_synthesizer_agent_prompt_template() -> ChatPromptTemplate:
+    system_prompt = SYNTHESIS_AGENT_SYSTEM_PROMPT
+    return ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt)
         ]
     )

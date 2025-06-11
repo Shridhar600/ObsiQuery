@@ -55,8 +55,8 @@ class ObsiQueryBot:
             log.debug(f"Graph response for thread '{thread_id}': {response}")
 
             if response and "messages" in response and response["messages"]:
-                return {"reply": response["messages"][-1].content, "full_response": response} # Return more if needed by UI
-            return {"reply": "No message found in graph's response.", "full_response": response}
+                return {"reply": response["messages"][-1].content, " -- full_response -- ": response} # Return more if needed by UI
+            return {"reply": "No message found in graph's response.", " -- full_response --": response}
         except Exception as e:
             log.exception(f"Error invoking graph for thread '{thread_id}': {e}")
-            return {"error": str(e), "full_response": None}
+            return {"error": str(e), " -- full_response -- ": None}

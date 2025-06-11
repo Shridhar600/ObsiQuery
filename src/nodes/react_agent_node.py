@@ -1,4 +1,3 @@
-from src.llm import llm_instance
 from src.utils import setup_logger, get_system_time_info
 from src.prompts import get_react_agent_prompt_template
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -32,4 +31,5 @@ def react_agent_node(state:dict, llm_with_tools:BaseChatModel):
     prompt = prompt_template.invoke(prompt_variables)
 
     response = llm_with_tools.invoke(prompt)
+    # log.debug(f" ---  Response from REACT AGENT {response}")
     return {"messages" : [response]}
