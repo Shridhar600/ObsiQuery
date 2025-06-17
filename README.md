@@ -15,7 +15,6 @@ ObsiQuery is a local, privacy-preserving AI assistant that transforms your Obsid
 *   **Change Tracking:** Efficiently manages the ingestion process by only re-processing files that are new, modified, or previously failed.
 
 ## Architecture Overview
----
 ![Recording 2025-06-16 192558](https://github.com/user-attachments/assets/2cedf3df-c5b4-453e-9d06-7c18015ffadf)
 
 ObsiQuery consists of two principal layers:
