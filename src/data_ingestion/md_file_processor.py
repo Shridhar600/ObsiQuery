@@ -35,11 +35,11 @@ def load_markdown_file(file: FileMetadata) -> List[Document]:
 
 def chunk_documents(documents: List[Document], file_metadata: FileMetadata ) -> List[Document]:
     """
-    Orchestrates the markdown chunking process:
+    Orchestrates the Markdown chunking process:
     1. Consume raw text from the TextLoader Document.
     2. Get semantic blocks using markdown-it-py.
     3. Assemble blocks into LangChain Document chunks with overlap and metadata.
-    Assumes input 'documents' is a list containing a single Document from TextLoader. idk why but langchain load method emits a list of Document containing a single Document.
+    Assumes input 'documents' is a list containing a single Document from TextLoader. idk why but langchain load method emits a list of Documents containing a single Document.
     Returns a list of Document chunks.
     """
     if not documents or not documents[0].page_content:

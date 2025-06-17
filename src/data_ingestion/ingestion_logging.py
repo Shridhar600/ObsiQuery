@@ -12,7 +12,7 @@ def log_file_metadata(dir:str) -> None:
 
     with SQLiteDB() as db:
         try:
-            files_metadata = collect_markdown_metadata(dir)
+            files_metadata = collect_markdown_metadata(dir) # Runs over a directory to fetch all the available File Metadata.
             log.info(f"Collected {len(files_metadata)} files from {dir}")
             db.upsert_files_metadata(files_metadata)
         except Exception as e:
@@ -82,3 +82,15 @@ def collect_markdown_metadata(directory: str) -> List[FileMetadata]:
                 markdown_files_metadata.append(metadata)
 
     return markdown_files_metadata
+
+def fetch_available_notes() -> list[str]:
+    filenames = []
+    with SQLiteDB() as db:
+        try:
+            filenames = db.get_enabled_completed_filenames()
+        except Exception as e:
+            log.error(f"Error getting enabled filenames for VSQFG agent: {e}", exc_info=True)
+            raise ValueError("Error getting enabled filenames for VSQFG agent")
+
+    log.info(f"Fetched {len(filenames)} files VSQFG agent's system prompt")
+    return filenames

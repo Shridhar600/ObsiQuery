@@ -13,7 +13,7 @@ class FileMetadata:
     file_hash: Optional[str]  # Optional, can be used for deduplication
     file_size: int
     last_modified: float  # Last modified time as a Unix timestamp
-    last_ingested: Optional[float]  # Last ingested time as a Unix timestamp, can be used to track when the file was last processed
+    last_ingested: Optional[float]  # Last ingested time as a Unix timestamp can be used to track when the file was last processed
     num_chunks: Optional[int]
     status: str  # Status of the file (e.g., PENDING, IN_PROGRESS, COMPLETED, FAILED)
     error_message: Optional[str]  # Optional error message if processing failed

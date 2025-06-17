@@ -84,7 +84,7 @@ class SQLiteDB:
         try:
             with self.connection:
                 for metadata in metadata_list:
-                    existing = self._select_file_by_path(metadata.file_path) # check if file_log already exists
+                    existing = self._select_file_by_path(metadata.file_path) # check if file_log already exists todo: need to add a logic that when it goes to fetch log and sees an entry but it is disabled. then it should skip that file.
                     if not existing:# File does not exist, insert new entry
                         is_inserted = self._insert_file_entry(metadata)
                         if is_inserted:
@@ -272,6 +272,18 @@ class SQLiteDB:
         rows = self.cursor.fetchall()
         # log.info(f"Retrieved {len(rows)} files with status '{status1}' or '{status2}'")
         return rows
+
+    def get_enabled_completed_filenames(self):
+        try:
+
+            self.cursor.execute(
+                "SELECT file_name FROM obq_log WHERE is_enabled = 1 AND status = 'completed'"
+            )
+            filenames = [row[0] for row in self.cursor.fetchall()]
+            return filenames
+        except Exception as e:
+            log.error(f"Failed to fetch enabled and completed filenames: {e}", exc_info=True)
+            return []
 
     def get_all_tracked_files(self) -> Dict[str, sqlite3.Row]:
         """

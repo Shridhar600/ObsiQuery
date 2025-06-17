@@ -1,5 +1,3 @@
-from ollama import embed
-from src import embedding
 from src.utils import config
 from langchain_ollama import OllamaEmbeddings
 from src.utils.logger import setup_logger

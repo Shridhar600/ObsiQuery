@@ -7,7 +7,7 @@ from src.data_ingestion import SQLiteDB
 
 log = setup_logger(__name__)
 
-def ingest_md_files_to_Vector_database(files: List[FileMetadata]):
+def ingest_md_files_to_vector_database(files: List[FileMetadata]):
     """
     Ingests a list of Markdown files from log table by loading, chunking, and uploading them to the vector DB.
     Skips files with invalid metadata or ingestion issues, but continues processing others.
@@ -21,7 +21,7 @@ def ingest_md_files_to_Vector_database(files: List[FileMetadata]):
 
     for file in files:
         log.info(f"Processing file: {file.file_path}")
-        # sqlite db to be update with status started.
+        # sqlite db to be updated with status started.
         try:
             with SQLiteDB() as db:
                 db.update_file_status(file.id, Status.PROCESSING.value)
