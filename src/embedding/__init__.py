@@ -1,0 +1,1 @@
+from .embedding_model import embedding_model_instance,test_embedding_model
