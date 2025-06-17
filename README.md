@@ -19,8 +19,6 @@ ObsiQuery is a local, privacy-preserving AI assistant that transforms your Obsid
 
 ObsiQuery consists of two principal layers:
 
-ObsiQuery consists of two principal layers:
-
 1.  **Data Pipeline Layer:** Responsible for processing your local Obsidian markdown notes, extracting structure and content, splitting them into semantically meaningful chunks, enriching them with metadata, and storing their vector representations in a local database (ChromaDB).
 2.  **Agentic Layer:** Powered by a primary ReAct agent. This layer handles user interaction, understands queries, and retrieves information from the processed notes via a specialized RAG tool.
 
