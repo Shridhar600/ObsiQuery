@@ -21,7 +21,7 @@ def get_rag_agent_prompt_template() -> ChatPromptTemplate:
     return ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt), # this has files, conversation history for context.
-            ("human", "ReAct_agent Query: {input_query_from_react_agent}") 
+            ("assistant", "ReAct_agent Query: {input_query_from_react_agent}") 
         ]
     )
 
