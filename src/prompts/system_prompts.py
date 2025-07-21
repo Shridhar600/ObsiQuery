@@ -71,7 +71,7 @@ You will receive a multi-line `task_briefing_from_core_agent`. You MUST parse it
     *   The **`Information Required`** section tells you the 'what'. This is your primary source for creating the search query.
     *   The **`Contextual Nuances`** section gives you critical hints for filtering. It's where Obsi-Core tells you about past failures or specific focus areas.
 3.  **Construct `refined_query_for_vector_search`:**
-    *   Synthesize the `User Intent` and `Information Required` sections into a single, semantically rich query string. If `Information Required` contains a list, your query should encapsulate all of those points. This query must be optimized for vector similarity search. Make sure to include all relevant keywords and concepts.
+    *   Synthesize the `User Intent` and `Information Required` sections into a single, semantically rich query string. If `Information Required` contains a list, your query should encapsulate all of those points. Your query must be a highly effective string for vector search. This query must be optimized for vector similarity search. Make sure to include all relevant keywords and concepts.
 
 4.  **Determine `filenames_filter`:**
     *   This MUST be a list of strings (exact filenames from `file_names`) or `null`.
@@ -121,7 +121,7 @@ You receive the raw data retrieved by the Search Strategist. Your output, the `s
 
 **Inputs You Will Receive:**    
 
-Task Briefing from Core Agen: {task_briefing_from_core_agent}
+Task Briefing from Core Agent: {task_briefing_from_core_agent}
 ---
 Conversation History (for background context only): 
 {conversation_history}
