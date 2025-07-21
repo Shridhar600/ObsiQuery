@@ -1,28 +1,34 @@
 from pydantic import BaseModel, Field
-from typing import Optional,List
+from typing import Optional, List
 
 class VectorSearchOutputSchema(BaseModel):
     """
-    Defines the structured output for deriving vector search parameters.
-    This schema is used by an LLM to specify how to query the vector database.
+    Defines the structured output for a Search Strategist agent.
+    This schema translates a mission briefing into precise vector search parameters.
     """
     
     refined_query_for_vector_search: str = Field(
+        ..., # The '...' makes this a required field
         description=(
-            "A concise, semantically rich query string optimized for vector similarity search. "
-            "This query should capture the core intent of the original user request, "
-            "potentially rephrased or expanded with keywords for better retrieval from the notes."
+            "Synthesize the 'User Intent' and 'Information Required' from the mission briefing "
+            "into a single, powerful query optimized for semantic vector search."
         )
     )
     
     filenames_filter: Optional[List[str]] = Field(
         default=None,
         description=(
-            "An optional list of one or more filenames to filter the vector search. "
-            "The search will be restricted to chunks originating from these specified files. "
-            "If multiple filenames are provided, it implies an OR condition (retrieve from fileA OR fileB OR ...). "
-            "If the LLM identifies a single most relevant file, provide it as a list with one item (e.g., ['my_specific_note.md']). "
-            "If no specific files can be confidently identified as exclusively relevant, leave this field null or an empty list."
+            "A list of exact filenames to narrow the search. CRUCIALLY, only include filenames "
+            "if the briefing provides strong, direct evidence. If unsure, you MUST return `null`."
         )
     )
-    
+
+    filter_rationale: str = Field(
+        ...,
+        description=(
+            "A concise, one-sentence explanation for your decision on the `filename_filter`. "
+            "If you included files, state *why* (e.g., 'The briefing's 'Contextual Nuances' "
+            "explicitly mentioned the Project Phoenix PRD.'). If you returned `null`, state why "
+            "(e.g., 'The briefing was general and provided no evidence for specific files.')."
+        )
+    )
