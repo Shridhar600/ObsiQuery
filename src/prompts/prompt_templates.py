@@ -20,8 +20,8 @@ def get_rag_agent_prompt_template() -> ChatPromptTemplate:
     system_prompt = VECTOR_SEARCH_FILTER_AGENT_PROMPT
     return ChatPromptTemplate.from_messages(
         [
-            ("system", system_prompt), # this has files, conversation history for context.
-            ("assistant", "ReAct_agent Query: {input_query_from_react_agent}") 
+            ("system", system_prompt) # this has files, conversation history for context and task briefing
+            # ("assistant", "task_briefing_from_core_agent: {task_briefing_from_core_agent}") 
         ]
     )
 

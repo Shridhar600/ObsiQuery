@@ -17,22 +17,31 @@ llm_with_structured_output = llm_instance.with_structured_output(schema=VectorSe
 available_notes = fetch_available_notes()
 
 @tool(name_or_callable= 'rag_agent_tool',response_format="content_and_artifact" )
-def retrieve_notes_tool(query: str, state: Annotated[AgentState, InjectedState]) -> tuple:
+def retrieve_notes_tool(task_briefing: str, state: Annotated[AgentState, InjectedState]) -> tuple:
     """
-    Retrieves relevant information from user's notes.
-    1. Uses an LLM to refine the query and derive metadata filters.
-    2. Performs a vector search with these parameters.
-    3. Synthesizes an answer from the results.
-    Returns a dictionary with 'summary', 'retrieved_chunks_details'.
-    """ 
+    Orchestrates sub-agents to retrieve and synthesize information from user notes.
+
+    This tool acts as a gateway to a specialized RAG team. You MUST provide a
+    detailed, multi-line string 'task_briefing' to give the team its mission.
+    The briefing must contain 'User Intent', 'Information Required', and
+    'Contextual Nuances' sections.
+
+    Args:
+        task_briefing: A detailed, multi-line string containing the mission
+                       directives for the retrieval and synthesis sub-agents.
+
+    Returns:
+        A tuple containing a dictionary with the final 'synthesis' from the
+        sub-agents and details about the retrieval process.
+    """
     # log.info(state)
-    log.info(f" -- ReAct Agent has requested the Rag_agent_tool with query: {query} -- ")
+    log.info(f" -- ReAct Agent has requested the Rag_agent_tool with task_briefing: {task_briefing} -- ")
 
     formatted_history = get_formatted_convo_history(state)
     # log.info(f"formatted_history: ---  {formatted_history} " )
     # log.info("----------------------------------------------------------------------------------------------------------------------------------------------")
     
-    query_filters: VectorSearchOutputSchema = get_vector_search_filters_from_llm(query,formatted_history )
+    query_filters: VectorSearchOutputSchema = get_vector_search_filters_from_llm(task_briefing,formatted_history )
 
     log.info(f" -- Output From the Vector Search Filter LLM : {query_filters} -- ")
 
@@ -55,7 +64,7 @@ def retrieve_notes_tool(query: str, state: Annotated[AgentState, InjectedState])
         synthesizer_prompt_template = get_synthesizer_agent_prompt_template()
 
         prompt_variables = {
-        "Main_conversation_agent_Query": query,
+        "task_briefing_from_core_agent": task_briefing,
         "conversation_history":formatted_history,
         "user_notes": context_string
         }
@@ -88,7 +97,7 @@ def get_vector_search_filters_from_llm(query,formatted_history:str) -> VectorSea
     
     prompt_variables = {
         "file_names": formatted_file_names,
-        "input_query_from_react_agent": query,
+        "task_briefing_from_core_agent": query,
         "conversation_history": formatted_history
     }
 
