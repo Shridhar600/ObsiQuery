@@ -42,18 +42,73 @@ The Agentic Layer serves as the user-facing intelligence and control center for 
 *   **`retrieve_notes_tool`:** A crucial, specialized tool available to the Main ReAct Agent. It encapsulates the entire complex RAG (Retrieval-Augmented Generation) workflow needed to query the user's knowledge base.
 *   **Internal RAG Agents/Components:** Within the `retrieve_notes_tool`, dedicated LLM instances or logical units (Retriever/Filter Agent, Synthesizer Agent) handle specific RAG sub-tasks like determining search parameters and generating summaries.
 
-## Setup Instructions
+## Project Setup Instructions
 
-1.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-2.  **Configure environment variables:**
+### **1. Windows Setup**
+
+**Requirements:**
+
+* `Python 3.13.5` (ensure it's added to PATH)
+* `pip` installed and up to date
+
+**Steps:**
+
+```bash
+# 1. Clone the repository
+ git clone <repo_url>
+ cd Obsiquery
+
+# 2. Create and activate virtual environment
+ python -m venv venv
+ venv\Scripts\activate
+
+# 3. Install dependencies
+ pip install -r requirements.txt
+
+```
+
+**Notes:**
+
+* Always activate the virtual environment before running the project.
+* If issues occur, delete the `venv` folder and recreate it.
+
+---
+
+### **2. macOS Setup (Managed by pyenv)**
+
+**Requirements:**
+
+* Python 3.13.5 (installed via `pyenv`)
+
+**Steps:**
+
+```bash
+# 1. Clone the repository
+ git clone <repo_url>
+ cd Obsiquery
+
+# 2. Create virtual environment via pyenv
+ pyenv virtualenv 3.13.5 obsiquery-env
+ pyenv local obsiquery-env
+
+# 3. Install dependencies
+ pip install -r requirements.txt
+
+```
+
+**Notes:**
+* Do not use macOS system Python.
+
+## How to Run Obsiquery:
+
+1.  **Configure environment variables:**
     *   Copy the contents of `.env.example` to a new file named `.env`.
     *   Modify the variables in the `.env` file to match your environment.
     *   Set the `OBSIDIAN_VAULT_PATH` variable to the path of your Obsidian vault.
     *   Configure other environment variables as needed.
-3.  **Run the Streamlit UI:**
+    * If using Ollama to serve LLM then, make sure it is running in the background and has the desired model pulled.
+
+2.  **Run the Streamlit UI:**
     ```bash
     streamlit run streamlit_ui.py
     ```
@@ -62,9 +117,10 @@ The Agentic Layer serves as the user-facing intelligence and control center for 
 ## Usage Instructions
 
 1.  Open the Streamlit UI in your browser.
-2.  Enter your query in the text box.
-3.  Click the "Send" button.
-4.  The AI assistant will respond with an answer based on your notes.
+2.  Run the Ingestion Pipeline once to create vector embedding of vault notes.
+3.  Enter your query in the text box.
+4.  Click the "Send" button.
+5.  The AI assistant will respond with an answer based on your notes when required or asked.
 
 ## Contribution Guidelines
 
@@ -72,5 +128,5 @@ Contributions are welcome! Please follow these guidelines:
 
 *   Fork the repository.
 *   Create a new branch for your feature or bug fix.
-*   Write tests for your code.
+* DON'T OVERCOMPLICATE.
 *   Submit a pull request.
